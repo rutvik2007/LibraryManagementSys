@@ -1,0 +1,257 @@
+import mysql.connector
+import hashlib
+import getpass
+mydb=mysql.connector.connect(host="localhost",user="root",passwd="test")
+mycursor=mydb.cursor()
+mycursor.execute("use Library1")
+def addBook():
+	global mydb
+	banner="ADDING NEW BOOK TO DATABASE"
+	banner=banner.center(75,' ')
+	print(banner)
+	print("Enter the title of the book")
+	bTitle=input()
+	print("Enter the ISBN of the book")
+	bISBN=input()
+	print("Enter the ID of the author for the book")
+	AuthID=input()
+	print("Enter the genre of the book")
+	bGenre=input()
+	print("Enter the book edition")
+	bEdition=input()
+	print("Enter the price of the book")
+	bPrice=int(input())
+	print("Enter the number of copies of the book available")
+	bQuant=int(input())
+	mycursor=mydb.cursor()
+	sql="insert into Book values(%s,%s,%s,%s,%s,%s,%s)"
+	val=(bISBN,bPrice,bTitle,bGenre,bEdition,AuthID,bQuant)
+	mycursor.execute(sql,val)
+	mydb.commit()
+
+def addUser():
+	global mydb
+	mycursor=mydb.cursor()
+	banner="ADDING NEW USER TO DATABASE"
+	banner=banner.center(60,'-')
+	print(banner)
+	print("Enter the UserID of the user (Registration Number)")
+	UserID=input()
+	print("Enter name of the name of the user")
+	Name=input()
+	print("Enter the password")
+	passwd=getpass.getpass("Password:")
+	password=hashlib.sha1(passwd.encode()).hexdigest()
+	password=str(password)
+	fine=0
+	sql="insert into User values(%s,%s,%s,%s)"
+	val=(UserID,Name,password,fine)
+	try:
+		mycursor.execute(sql,val)
+	except (mysql.connector.IntegrityError, mysql.connector.DataError) as err:
+		print("Error: {}".format(err))
+	mydb.commit()
+
+def addAuthor():
+	global mydb
+	mycursor=mydb.cursor()
+	banner="ADDING NEW AUTHOR TO DATABASE"
+	banner=banner.center(60,'-')
+	print(banner)
+	print("Enter the name of the author")
+	aName=input()
+	print("Enter the ID of the author")
+	aID=input()
+	print("Enter the age of the author")
+	aAge=int(input())
+	mycursor=mydb.cursor()
+	sql="insert into Author values(%s,%s,%s)"
+	val=(aName,aID,aAge)
+	try:
+		mycursor.execute(sql,val)
+	except (mysql.connector.IntegrityError,mysql.connector.DataError) as err:
+		print("Error: {}".format(err))
+	mydb.commit()
+def searchBook():
+	global mydb
+	print("Search book based on:")
+	print("1 Author Name")
+	print("2 Title")
+	print("3 ISBN")
+	print("4 Genre")
+	choice=int(input())
+	if(choice==2):
+		print("Enter the title of the book\n")
+		title=input()
+		query ="SELECT Title,Genre,Edition,AuthorID,quantity,ISBN FROM Book WHERE Title like %s"
+		mycursor.execute(query,("%"+title+"%",))
+		data=mycursor.fetchall()
+		if(len(data)==0):
+			print("No records found")
+			return
+		else:
+			print("\t\tRESULTS:\n")
+			for title,genre,edition,authorID,quantity,ISBN in data:
+				query=("SELECT AuthName from Author where AuthorID=%s")
+				mycursor.execute(query,(authorID,))
+				name=mycursor.fetchall()
+				print("Title: ",title,"\tAuthor: ",name[0][0],"\tEdition: ",edition,"\tGenre: ",genre)
+				print("Quantity: ",quantity,"\tISBN")
+				print()
+	if (choice==1):
+		print("Enter the name of the Author of the book")
+		authName=input()
+		query="SELECT AuthName,AuthorID from Author where AuthName like %s"
+		mycursor.execute(query,("%"+authName+"%",))
+		data=mycursor.fetchall()
+		if(len(data)==0):
+			print("No records found")
+		else:
+			for authName,authID in data:
+				query="SELECT Title,Genre,Edition,quantity,ISBN from Book where AuthorID=%s"
+				mycursor.execute(query,(authID,))
+				data1=mycursor.fetchall()
+				for Title,Genre,Edition,quantity,ISBN in data1:
+					print("Title: ",Title,"\tAuthor: ",authName,"\tEdition: ",Edition,"\tGenre: ",Genre)
+					print("Quantity: ",quantity,"\tISBN: ",ISBN)
+					print()
+	if(choice==3):
+		print("Enter the ISBN of the book")
+		isbn=input()
+		query="SELECT Title,Genre,Edition,AuthorID,quantity,ISBN from Book where ISBN like %s"
+		mycursor.execute(query,("%"+isbn+"%",))
+		data=mycursor.fetchall()
+		if(len(data)>0):
+			for title,genre,edition,authorID,quantity,ISBN in data:
+				query=("SELECT AuthName from Author where AuthorID=%s")
+				mycursor.execute(query,(authorID,))
+				name=mycursor.fetchall()
+				print("Title: ",title,"\tAuthor: ",name[0][0],"\tEdition: ",edition,"\tGenre: ",genre)
+				print("Quantity: ",quantity,"\tISBN: ",ISBN)
+				print()
+		else:
+			pass
+	if(choice==4):
+		print("Enter the genre of the book")
+		Genre=input()
+		query="SELECT Title,genre,Edition,AuthorID,quantity,ISBN from Book where genre like %s"
+		mycursor.execute(query,("%"+Genre+"%",))
+		data=mycursor.fetchall()
+		if(len(data)>0):
+			for title,genre,edition,authorID,quantity,ISBN in data:
+				query=("SELECT AuthName from Author where AuthorID=%s")
+				mycursor.execute(query,(authorID,))
+				name=mycursor.fetchall()
+				print("Title: ",title,"\tAuthor: ",name[0][0],"\tEdition: ",edition,"\tGenre: ",genre)
+				print("Quantity: ",quantity,"\tISBN: ",ISBN)
+				print()
+		else:
+			pass
+
+def user_login():
+	global mycursor
+	username=input("Enter your username: ")
+	passwd=getpass.getpass("Enter your password: ")
+	query="SELECT UserID,Password from User where UserID=%s"
+	mycursor.execute(query,(username,))
+	stuff=mycursor.fetchall()
+	if len(stuff)==0:
+		print("Invalid username or password")
+		return((False,username))
+	password=stuff[0][1]
+	if password==hashlib.sha1(passwd.encode()).hexdigest():
+		print("Logged in")
+		return((True,username))
+	else:
+		print("Invalid username or password")
+		return((False,username))
+def admin_login():
+	global mycursor
+	username=input("Enter your username: ")
+	passwd=getpass.getpass("Enter your password: ")
+	query="SELECT AdminID,password from Admin where AdminID=%s"
+	mycursor.execute(query,(username,))
+	stuff=mycursor.fetchall()
+	if len(stuff)==0:
+		print("Invalid username or password")
+		return((False,username))
+	password=stuff[0][1]
+	if password==hashlib.sha1(passwd.encode()).hexdigest():
+		print("Logged in")
+		return((True,username))
+	else:
+		print("Invalid username or password")
+		return((False,username))
+#def main_menu():
+#	global mycursor
+#	print("\t  ---LIBRARY MANAGEMENT SYSTEM---   ".center(75,' '),"\n\n\n")
+#	print("1 User Login\n\n2 Search for a book\n\n3 Admin Login\n\n")
+#	choice=int(input())
+#	if(choice==1):
+#		check=user_login()
+#		if(check[0])
+
+
+def issue_book(userID):
+	global mydb
+	global mycursor
+	print("Would you like to check the ISBN of the book before issuing?(y/n)")
+	check=input()
+	if(check=='y'):
+		searchBook()
+	print("Enter the ISBN of the book to be issued: \n")
+	issue_isbn=input()
+	query="select ISBN,quantity from Book where ISBN=%s"
+	mycursor.execute(query,(issue_isbn,))
+	data=mycursor.fetchall()
+	if(len(data)==1):
+		if(int(data[0][1])>0):
+			query="select count(No_of_Copies) from Book_Issued where UserID=%s"
+			mycursor.execute(query,(userID,))
+			data1=mycursor.fetchall()
+			if(int(data1[0][0])<3):
+				print("How many copies of the book would you like to issue? (There are ",data[0][1]," copies on the racks)\n")
+				copies_issued=int(input())
+				if(copies_issued>data[0][0]):
+					print("Not enough copies available; cancelling transaction")
+					return;
+				else if (data1[0][0]+copies_issued>3):
+					print("Cannot issue that many books; issue limit exceeded; cancelling transaction\n")
+					return;
+				query="update Book set quantity=%s where isbn=%s"
+				mycursor.execute(query,(int(data[0][1])-copies_issued,data[0][0]))
+				query="insert into Book_Issued values(%s,%s,%s)"
+				mycursor.execute(query,(userID,issue_isbn,copies_issued))
+			else:
+				print("Cannot issue book : Already issued 3 books")
+		else:
+			print("Book not in stock")
+	else:
+		print("No book with given ISBN found in library")
+	mydb.commit()
+#addUser()
+def return_book(UserID):
+	global mydb
+	global mycursor
+	print("Would you like to check the ISBN of the book before returning?(y/n)")
+	check=input()
+	if(check=='y'):
+		searchBook()
+	print("Enter the ISBN of the book to be returned")
+	return_isbn=input()
+	query="select ISBN,quantity from Book where ISBN=%s"
+	mycursor.execute(query,(return_isbn))
+	data=mycursor.fetchall()
+	if(len(data)==1):
+		query="select ISBN,No_of_Copies from Book_Issued where ISBN=%s and UserID=%s"
+		mycursor.execute(query,(return_isbn,UserID))
+		data1=mycursor.fetchall()
+		if(len(data1)==0):
+			print("You have not issued the book, hence it cannot be returned\n")
+		else:
+			num_copies=data1[0][1]
+			if(num_copies>1):
+				print("You have issued",num_copies," of the book; how many would you like to return?")
+				copies_return=int(input())
+				if(copies_return>num_copies):
+					print("You have not ")
