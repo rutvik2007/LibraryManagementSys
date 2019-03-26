@@ -1,7 +1,7 @@
 import mysql.connector
 import hashlib
 import getpass
-mydb=mysql.connector.connect(host="localhost",user="root",passwd="test")
+mydb=mysql.connector.connect(host="",user="",passwd="")
 mycursor=mydb.cursor()
 mycursor.execute("use Library1")
 def addBook():
@@ -22,12 +22,22 @@ def addBook():
 	print("Enter the price of the book")
 	bPrice=int(input())
 	print("Enter the number of copies of the book available")
+	query="select quantity from Book where ISBN=%s"
+	mycursor.execute(query,(bISBN,))
+	data=mycursor.fetchall()
 	bQuant=int(input())
-	mycursor=mydb.cursor()
-	sql="insert into Book values(%s,%s,%s,%s,%s,%s,%s)"
-	val=(bISBN,bPrice,bTitle,bGenre,bEdition,AuthID,bQuant)
-	mycursor.execute(sql,val)
-	mydb.commit()
+	if(len(data)==0):
+
+		mycursor=mydb.cursor()
+		sql="insert into Book values(%s,%s,%s,%s,%s,%s,%s)"
+		val=(bISBN,bPrice,bTitle,bGenre,bEdition,AuthID,bQuant)
+		mycursor.execute(sql,val)
+		mydb.commit()
+	else:
+		print("Book with same ISBN already exists in database, adding quantity to existing record")
+		query="update Book set quantity=%s where ISBN=%s"
+		mycursor.execute(query,(data[0][0]+bQuant,bISBN))
+		mydb.commit()
 
 def addUser():
 	global mydb
@@ -72,6 +82,7 @@ def addAuthor():
 	except (mysql.connector.IntegrityError,mysql.connector.DataError) as err:
 		print("Error: {}".format(err))
 	mydb.commit()
+
 def searchBook():
 	global mydb
 	print("Search book based on:")
@@ -165,6 +176,7 @@ def user_login():
 	else:
 		print("Invalid username or password")
 		return((False,username))
+
 def admin_login():
 	global mycursor
 	username=input("Enter your username: ")
@@ -182,15 +194,6 @@ def admin_login():
 	else:
 		print("Invalid username or password")
 		return((False,username))
-#def main_menu():
-#	global mycursor
-#	print("\t  ---LIBRARY MANAGEMENT SYSTEM---   ".center(75,' '),"\n\n\n")
-#	print("1 User Login\n\n2 Search for a book\n\n3 Admin Login\n\n")
-#	choice=int(input())
-#	if(choice==1):
-#		check=user_login()
-#		if(check[0])
-
 
 def issue_book(userID):
 	global mydb
@@ -212,35 +215,42 @@ def issue_book(userID):
 			if(int(data1[0][0])<3):
 				print("How many copies of the book would you like to issue? (There are ",data[0][1]," copies on the racks)\n")
 				copies_issued=int(input())
-				if(copies_issued>data[0][0]):
-					print("Not enough copies available; cancelling transaction")
+				while(copies_issued>int(data[0][1]) or copies_issued<=0):
+					print("Invalid number of copies entered; re-enter the number of copies to be issued\n")
+					copies_issued=int(input())
+				if (data1[0][0]+copies_issued>3):
+					print("Cannot issue books; book issue limit exceeded; cancelling transaction\n")
 					return;
-				else if (data1[0][0]+copies_issued>3):
-					print("Cannot issue that many books; issue limit exceeded; cancelling transaction\n")
-					return;
-				query="update Book set quantity=%s where isbn=%s"
+				query="select No_of_Copies from Book_Issued where UserID=%s and ISBN=%s"
+				mycursor.execute(query,(userID,data[0][0]))
+				stuff=mycursor.fetchall()
+				if(len(stuff)==1):
+					query="update Book_Issued set No_of_Copies=%s where ISBN=%s and UserID=%s"
+					mycursor.execute(query,(stuff[0][0]+copies_issued,issue_isbn,userID))
+				else:
+					query="insert into Book_Issued values(%s,%s,%s)"
+					mycursor.execute(query,(userID,issue_isbn,copies_issued))
+				query="update Book set quantity=%s where ISBN=%s"
 				mycursor.execute(query,(int(data[0][1])-copies_issued,data[0][0]))
-				query="insert into Book_Issued values(%s,%s,%s)"
-				mycursor.execute(query,(userID,issue_isbn,copies_issued))
+				mydb.commit()
 			else:
-				print("Cannot issue book : Already issued 3 books")
+				print("Cannot issue book; Already issued 3 books")
 		else:
 			print("Book not in stock")
 	else:
 		print("No book with given ISBN found in library")
-	mydb.commit()
-#addUser()
+
 def return_book(UserID):
 	global mydb
 	global mycursor
 	print("Would you like to check the ISBN of the book before returning?(y/n)")
 	check=input()
 	if(check=='y'):
-		searchBook()
+		view_issued(UserID)
 	print("Enter the ISBN of the book to be returned")
 	return_isbn=input()
 	query="select ISBN,quantity from Book where ISBN=%s"
-	mycursor.execute(query,(return_isbn))
+	mycursor.execute(query,(return_isbn,))
 	data=mycursor.fetchall()
 	if(len(data)==1):
 		query="select ISBN,No_of_Copies from Book_Issued where ISBN=%s and UserID=%s"
@@ -250,8 +260,165 @@ def return_book(UserID):
 			print("You have not issued the book, hence it cannot be returned\n")
 		else:
 			num_copies=data1[0][1]
-			if(num_copies>1):
-				print("You have issued",num_copies," of the book; how many would you like to return?")
+			print("You have issued",num_copies," of the book; how many would you like to return?")
+			copies_return=int(input())
+			while(copies_return>num_copies):
+				print("You have not issued that many copies, please re-enter the number of copies to be returned")
 				copies_return=int(input())
-				if(copies_return>num_copies):
-					print("You have not ")
+			if(num_copies==copies_return):
+				query="delete from Book_Issued where ISBN=%s and UserID=%s"
+				mycursor.execute(query,(return_isbn,UserID))
+			else:
+				query="update Book_Issued set No_of_Copies=%s where ISBN=%s and UserID=%s"
+				mycursor.execute(query,(num_copies-copies_return,return_isbn,UserID))
+			query="update Book set quantity=%s where ISBN=%s"
+			mycursor.execute(query,(data[0][1]+copies_return,return_isbn))
+			mydb.commit()
+			print("Book has been returned")
+	else:
+		print("No such book exists in library")
+
+def user_change_password(UserID):
+	global mycursor
+	global mydb
+	passwd=getpass.getpass("Enter your old password: ")
+	query="SELECT Password from User where UserID=%s"
+	mycursor.execute(query,(userID,))
+	stuff=mycursor.fetchall()
+	password=stuff[0][1]
+	count=0
+	while(1):
+		count+=1
+		if password==hashlib.sha1(passwd.encode()).hexdigest():
+			passwd=getpass.getpass("Enter your new password")
+			query="update User set Password = %s where UserID=%s"
+			mycursor.execute(query,((str(hashlib.sha1(passwd.encode()).hexdigest())),UserID))
+			mydb.commit()
+			break
+		else:
+			print("Wrong password, try again")
+			passwd=getpass.getpass("Enter your old password: ")
+		if(count==3):
+			print("Unable to reset password; password unchanged")
+			break
+
+def admin_change_password():
+	global mycursor
+	global mydb
+	UserID=input()
+	query="select Password from User where UserID=%s"
+	mycursor.execute(query,(UserID,))
+	data=mycursor.fetchall()
+	if(len(data)==0):
+		print("UserID does not exist")
+	else:
+		passwd=getpass.getpass("Enter your new password")
+		query="update User set Password = %s where UserID=%s"
+
+		pw=hashlib.sha1(passwd.encode())
+		mycursor.execute(query,(pw.hexdigest(),UserID))
+		print("Password updated")
+		mydb.commit()
+
+def view_issued(UserID):
+	global mycursor
+	global mydb
+	query="select ISBN,No_of_Copies from Book_Issued where UserID=%s"
+	mycursor.execute(query,(UserID,))
+	data=mycursor.fetchall()
+	if(len(data)==1):
+		for ISBN, num_copies in data:
+			query="select Price,Title,Genre,Edition,AuthorID,ISBN from Book where ISBN=%s"
+			mycursor.execute(query,(ISBN,))
+			data1=mycursor.fetchall()
+			#print(data1)
+			#print(data)
+			query="select AuthName from Author where AuthorID=%s"
+			mycursor.execute(query,(data1[0][4],))
+			data2=mycursor.fetchall()
+			#print(data2)
+			print("Title: ",data1[0][1],"\tAuthor: ",data2[0][0],"\tEdition: ",data1[0][3],"\tGenre: ",data1[0][2],"\tISBN: ",data1[0][5],"\tPrice: ",data1[0][0],"\n\n")
+	else:
+		print("You have not issued any books\n\n")
+
+def calcfine(UserID):
+	global mydb
+	global mycursor
+	print("Enter the number of days passed since the book was issued")
+	n=int(input())
+	if(n<0):
+		print("Invalid number of days")
+	elif(n<14):
+		fine=0
+	elif(n<30):
+		fine=(n-14)*1.5
+	elif(n>30):
+		fine=1.5*16+(n-16)*3
+	query="update User set Fine=%s where UserID=%s"
+	mycursor.execute(query,(fine,UserID))
+	print(fine)
+
+def clear_fine():
+	global mydb
+	global mycursor
+	print("Enter the UserID whose fine is to be cleared")
+	UserID=input()
+	query="select Fine from User where UserID=%s"
+	mycursor.execute(query,(UserID,))
+	data=mycursor.fetchall()
+	if(len(data)==0):
+		print("User does not exist")
+	else:
+		print("Fine of ",data[0][0]," to be collected from the user")
+		query="update User set Fine=%s where UserID=%s"
+		mycursor.execute(query,(0,UserID))
+		mydb.commit()
+
+
+
+def main():
+	while(1):
+		print("\t  ---LIBRARY MANAGEMENT SYSTEM---   ".center(75,' '),"\n\n\n")
+		print("1 User Login\n\n2 Search for a book\n\n3 Admin Login\n\n4 Exit\n\n")
+		choice=int(input())
+		if(choice==1):
+			check=user_login()
+			if(check[0]):
+				while(1):
+					print("1\tIssue book\n\n2\tReturn book\n\n3\tCalculate fine\n\n4\tChange password\n\n5\tSearch for books\n\n6\tView issued books\n\n7\tLogout\n")
+					opt=int(input())
+					if(opt==1):
+						issue_book(check[1])
+					elif(opt==2):
+						return_book(check[1])
+					elif(opt==3):
+						calcfine(check[1])
+					elif(opt==4):
+						user_change_password(check[1])
+					elif(opt==5):
+						searchBook()
+					elif(opt==6):
+						view_issued(check[1])
+					elif(opt==7):
+						break;
+					else:
+						print("Invalid input")
+		elif(choice==3):
+			check=admin_login()
+			if(check[0]):
+				while(1):
+					print("1\tCreate new student login\n\n2\tAdd a book record to the database\n\n3\tChange student password\n\n4\tReceive fine payment")
+					opt=int(input())
+					if(opt==1):
+						addUser()
+					elif(opt==2):
+						addBook()
+					elif(opt==3):
+						admin_change_password()
+					elif(opt==4):
+						clear_fine()
+		elif(choice==2):
+			searchBook()
+		elif(choice==4):
+			break;
+main()
